@@ -1,0 +1,6 @@
+{
+  "name": "Namaz Alarm",
+  "description": "Customizable Namaz alarms with Adhan audio, daily prayer tracker, Qibla compass, tasks, and digital Tasbih counter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
