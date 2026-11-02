@@ -35,9 +35,32 @@ object AlarmScheduler {
             val hour = timeParts[0].toIntOrNull() ?: continue
             val minute = timeParts[1].toIntOrNull() ?: continue
 
-            val repeatDays = alarm.days
+            val specificDate = alarm.date
+            if (!specificDate.isNullOrEmpty()) {
+                val parts = specificDate.split("-")
+                if (parts.size == 3) {
+                    val y = parts[0].toIntOrNull()
+                    val m = parts[1].toIntOrNull()?.minus(1)
+                    val d = parts[2].toIntOrNull()
+                    if (y != null && m != null && d != null) {
+                        val cal = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, y)
+                            set(Calendar.MONTH, m)
+                            set(Calendar.DAY_OF_MONTH, d)
+                            set(Calendar.HOUR_OF_DAY, hour)
+                            set(Calendar.MINUTE, minute)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        if (cal.timeInMillis > System.currentTimeMillis()) {
+                            scheduleExact(context, alarmManager, baseId * 10, cal.timeInMillis, alarm, settings)
+                        }
+                        continue
+                    }
+                }
+            }
 
-            if (repeatDays.isEmpty()) {
+            if (alarm.days.isEmpty()) {
                 // One-shot alarm: schedule next occurrence
                 val cal = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, hour)
@@ -51,7 +74,7 @@ object AlarmScheduler {
                 scheduleExact(context, alarmManager, baseId * 10, cal.timeInMillis, alarm, settings)
             } else {
                 // Repeated for selected days (0=Sunday ... 6=Saturday)
-                for (dayIndex in repeatDays) {
+                for (dayIndex in alarm.days) {
                     val cal = Calendar.getInstance().apply {
                         set(Calendar.DAY_OF_WEEK, dayIndex + 1)
                         set(Calendar.HOUR_OF_DAY, hour)

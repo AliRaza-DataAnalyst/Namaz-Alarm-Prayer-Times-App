@@ -9,7 +9,8 @@ data class AlarmItem(
     val isMuted: Boolean = false, // Mute sound when true
     val days: List<Int> = listOf(0, 1, 2, 3, 4, 5, 6), // 0=Sun, 1=Mon, ..., 6=Sat. Empty = once
     val soundType: String = "alarm_tone_1",
-    val customSoundUri: String? = null // When soundType == "custom_tone"
+    val customSoundUri: String? = null, // When soundType == "custom_tone"
+    val date: String? = null // Optional specific date "yyyy-MM-dd"
 )
 
 data class AlarmToneItem(

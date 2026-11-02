@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -22,10 +25,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -35,6 +44,10 @@ import com.example.data.model.AlarmItem
 import com.example.data.model.AppSettings
 import com.example.service.prayer.PrayerTimeCalculator
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 private val DAYS_SHORT = listOf("S", "M", "T", "W", "T", "F", "S")
 private val DAYS_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
@@ -284,9 +297,68 @@ private fun AlarmRowItem(
 
     val repeatText = remember(alarm.days) {
         when {
-            alarm.days.size == 7 -> "every day"
-            alarm.days.isEmpty() -> "once"
+            alarm.days.size == 7 -> "Everyday"
+            alarm.days.isEmpty() -> "Once"
             else -> alarm.days.mapNotNull { DAYS_NAMES.getOrNull(it) }.joinToString(" ")
+        }
+    }
+
+    val dateAndScheduleText = remember(alarm.date, alarm.time, alarm.days) {
+        if (!alarm.date.isNullOrEmpty()) {
+            try {
+                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val formatter = SimpleDateFormat("EEE, d MMM yyyy", Locale.US)
+                val parsed = parser.parse(alarm.date)
+                if (parsed != null) "📅 ${formatter.format(parsed)} (Once)" else "📅 ${alarm.date}"
+            } catch (_: Exception) {
+                "📅 ${alarm.date}"
+            }
+        } else {
+            val now = Calendar.getInstance()
+            val timeParts = alarm.time.split(":")
+            val h = timeParts.getOrNull(0)?.toIntOrNull() ?: 0
+            val m = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
+            val alarmCal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, h)
+                set(Calendar.MINUTE, m)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+
+            if (alarm.days.isEmpty()) {
+                if (alarmCal.timeInMillis <= now.timeInMillis) {
+                    alarmCal.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                val fmt = SimpleDateFormat("EEE, d MMM yyyy", Locale.US)
+                "📅 ${fmt.format(alarmCal.time)} (Once)"
+            } else {
+                val todayDow = now.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sun..6=Sat
+                val isToday = alarm.days.contains(todayDow) && alarmCal.timeInMillis > now.timeInMillis
+                val dateFmt = SimpleDateFormat("d MMM", Locale.US)
+                if (isToday) {
+                    "📅 Today, ${dateFmt.format(now.time)} • $repeatText"
+                } else {
+                    val nextCal = Calendar.getInstance().apply {
+                        set(Calendar.HOUR_OF_DAY, h)
+                        set(Calendar.MINUTE, m)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    var daysAhead = 1
+                    while (daysAhead <= 7) {
+                        nextCal.add(Calendar.DAY_OF_YEAR, 1)
+                        val dow = nextCal.get(Calendar.DAY_OF_WEEK) - 1
+                        if (alarm.days.contains(dow)) break
+                        daysAhead++
+                    }
+                    if (daysAhead == 1) {
+                        "📅 Tomorrow, ${dateFmt.format(nextCal.time)} • $repeatText"
+                    } else {
+                        val fullFmt = SimpleDateFormat("EEE, d MMM", Locale.US)
+                        "📅 ${fullFmt.format(nextCal.time)} • $repeatText"
+                    }
+                }
+            }
         }
     }
 
@@ -367,12 +439,16 @@ private fun AlarmRowItem(
                     modifier = Modifier.padding(top = 3.dp)
                 )
 
-                // Line 3: Repeat schedule frequency
+                // Line 3: Date and Schedule for all namaz
                 Text(
-                    text = repeatText,
-                    fontSize = 11.sp,
-                    color = TextMuted.copy(alpha = alpha),
-                    modifier = Modifier.padding(top = 1.dp)
+                    text = dateAndScheduleText,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AmberGold.copy(alpha = if (alarm.isEnabled) 0.9f else 0.45f),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp)
                 )
             }
 
@@ -456,14 +532,34 @@ private fun AlarmEditDialog(
     val initialMinute = remember {
         alarm.time.split(":").getOrNull(1)?.toIntOrNull() ?: 0
     }
-    val timePickerState = rememberTimePickerState(
-        initialHour = initialHour,
-        initialMinute = initialMinute,
-        is24Hour = is24Hour
-    )
 
-    LaunchedEffect(timePickerState.hour, timePickerState.minute) {
-        timeString = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
+    var selectedDate by remember { mutableStateOf(alarm.date) }
+    var showDatePickerDialog by remember { mutableStateOf(false) }
+
+    var isAm by remember { mutableStateOf(initialHour < 12) }
+    var hourInput by remember {
+        val h12 = if (initialHour % 12 == 0) 12 else initialHour % 12
+        mutableStateOf(if (is24Hour) "%02d".format(initialHour) else "%02d".format(h12))
+    }
+    var minuteInput by remember {
+        mutableStateOf("%02d".format(initialMinute))
+    }
+    var activeField by remember { mutableStateOf("hour") } // "hour" or "minute"
+
+    fun updateTypedTime(typedH: String, typedM: String, am: Boolean) {
+        val rawH = typedH.toIntOrNull() ?: 0
+        val rawM = (typedM.toIntOrNull() ?: 0).coerceIn(0, 59)
+        val validH24 = if (is24Hour) {
+            rawH.coerceIn(0, 23)
+        } else {
+            val clamped12 = rawH.coerceIn(1, 12)
+            if (am) {
+                if (clamped12 == 12) 0 else clamped12
+            } else {
+                if (clamped12 == 12) 12 else clamped12 + 12
+            }
+        }
+        timeString = "%02d:%02d".format(validH24, rawM)
     }
 
     Dialog(
@@ -520,31 +616,299 @@ private fun AlarmEditDialog(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Time Picker
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .wrapContentSize(),
-                            contentAlignment = Alignment.Center
+                        // 1. Manually Editable Time Digits (Tap to type with keyboard!)
+                        // 1. Manually Editable Digital Time Digits (Direct Keyboard Input)
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            TimePicker(
-                                state = timePickerState,
-                                colors = TimePickerDefaults.colors(
-                                    clockDialColor = DarkCardBg,
-                                    clockDialSelectedContentColor = Color.Black,
-                                    clockDialUnselectedContentColor = Color.White,
-                                    selectorColor = AmberGold,
-                                    containerColor = DarkSurface,
-                                    periodSelectorBorderColor = DarkSurfaceBorder,
-                                    periodSelectorSelectedContainerColor = AmberGold,
-                                    periodSelectorUnselectedContainerColor = DarkCardBg,
-                                    periodSelectorSelectedContentColor = Color.Black,
-                                    periodSelectorUnselectedContentColor = Color.White,
-                                    timeSelectorSelectedContainerColor = AmberBgTint,
-                                    timeSelectorUnselectedContainerColor = DarkCardBg,
-                                    timeSelectorSelectedContentColor = AmberGold,
-                                    timeSelectorUnselectedContentColor = Color.White
+                            val isHourActive = activeField == "hour"
+                            val isMinuteActive = activeField == "minute"
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                // Hour Box - Directly Editable with Keyboard
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = DarkCardBg,
+                                    border = BorderStroke(if (isHourActive) 2.dp else 1.dp, if (isHourActive) AmberGold else DarkSurfaceBorder),
+                                    modifier = Modifier
+                                        .size(width = 88.dp, height = 78.dp)
+                                        .clickable { activeField = "hour" }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        BasicTextField(
+                                            value = hourInput,
+                                            onValueChange = { newVal ->
+                                                activeField = "hour"
+                                                val digits = newVal.filter { it.isDigit() }.take(2)
+                                                hourInput = digits
+                                                if (digits.isNotEmpty()) {
+                                                    updateTypedTime(digits, minuteInput, isAm)
+                                                }
+                                            },
+                                            textStyle = TextStyle(
+                                                fontSize = 42.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = if (isHourActive) AmberGold else Color.White,
+                                                textAlign = TextAlign.Center
+                                            ),
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = KeyboardType.Number,
+                                                imeAction = ImeAction.Next
+                                            ),
+                                            singleLine = true,
+                                            cursorBrush = SolidColor(AmberGold)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = ":",
+                                    fontSize = 38.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
                                 )
+
+                                // Minute Box - Directly Editable with Keyboard
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = DarkCardBg,
+                                    border = BorderStroke(if (isMinuteActive) 2.dp else 1.dp, if (isMinuteActive) AmberGold else DarkSurfaceBorder),
+                                    modifier = Modifier
+                                        .size(width = 88.dp, height = 78.dp)
+                                        .clickable { activeField = "minute" }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        BasicTextField(
+                                            value = minuteInput,
+                                            onValueChange = { newVal ->
+                                                activeField = "minute"
+                                                val digits = newVal.filter { it.isDigit() }.take(2)
+                                                minuteInput = digits
+                                                if (digits.isNotEmpty()) {
+                                                    updateTypedTime(hourInput, digits, isAm)
+                                                }
+                                            },
+                                            textStyle = TextStyle(
+                                                fontSize = 42.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = if (isMinuteActive) AmberGold else Color.White,
+                                                textAlign = TextAlign.Center
+                                            ),
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = KeyboardType.Number,
+                                                imeAction = ImeAction.Done
+                                            ),
+                                            singleLine = true,
+                                            cursorBrush = SolidColor(AmberGold)
+                                        )
+                                    }
+                                }
+
+                                // AM/PM Toggle Box
+                                if (!is24Hour) {
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = DarkCardBg,
+                                        border = BorderStroke(1.dp, DarkSurfaceBorder),
+                                        modifier = Modifier
+                                            .width(64.dp)
+                                            .height(78.dp)
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxWidth()
+                                                    .background(if (isAm) AmberGold else Color.Transparent)
+                                                    .clickable {
+                                                        if (!isAm) {
+                                                            isAm = true
+                                                            updateTypedTime(hourInput, minuteInput, true)
+                                                        }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "AM",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isAm) Color.Black else TextSecondary
+                                                )
+                                            }
+
+                                            HorizontalDivider(color = DarkSurfaceBorder, thickness = 1.dp)
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxWidth()
+                                                    .background(if (!isAm) AmberGold else Color.Transparent)
+                                                    .clickable {
+                                                        if (isAm) {
+                                                            isAm = false
+                                                            updateTypedTime(hourInput, minuteInput, false)
+                                                        }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "PM",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (!isAm) Color.Black else TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Subtitle helper text
+                            Text(
+                                text = "⌨️ Tap boxes to type digits directly",
+                                fontSize = 11.5.sp,
+                                color = TextMuted
+                            )
+                        }
+
+                        // 2. Alarm Date & Schedule Section (تاریخ)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
+                            val tomorrowCal = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) } }
+                            val tomorrowStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(tomorrowCal.time) }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarToday,
+                                        contentDescription = null,
+                                        tint = AmberGold,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "Alarm Date (تاریخ)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = AmberGold
+                                    )
+                                }
+
+                                Text(
+                                    text = when (selectedDate) {
+                                        null -> "Daily (Everyday)"
+                                        todayStr -> "Today's Prayer"
+                                        tomorrowStr -> "Tomorrow's Prayer"
+                                        else -> selectedDate!!
+                                    },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedDate != null) AmberGold else EmeraldLight
+                                )
+                            }
+
+                            // Quick Date Selection Chips
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = selectedDate == null,
+                                    onClick = { selectedDate = null },
+                                    label = { Text("Daily 🔄", fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = EmeraldBgTint,
+                                        selectedLabelColor = EmeraldLight,
+                                        containerColor = DarkCardBg,
+                                        labelColor = TextSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = if (selectedDate == null) EmeraldGreen else DarkSurfaceBorder,
+                                        enabled = true,
+                                        selected = selectedDate == null
+                                    )
+                                )
+
+                                FilterChip(
+                                    selected = selectedDate == todayStr,
+                                    onClick = { selectedDate = todayStr },
+                                    label = { Text("Today 📅", fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AmberBgTint,
+                                        selectedLabelColor = AmberGold,
+                                        containerColor = DarkCardBg,
+                                        labelColor = TextSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = if (selectedDate == todayStr) AmberGold else DarkSurfaceBorder,
+                                        enabled = true,
+                                        selected = selectedDate == todayStr
+                                    )
+                                )
+
+                                FilterChip(
+                                    selected = selectedDate == tomorrowStr,
+                                    onClick = { selectedDate = tomorrowStr },
+                                    label = { Text("Tomorrow 🌅", fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AmberBgTint,
+                                        selectedLabelColor = AmberGold,
+                                        containerColor = DarkCardBg,
+                                        labelColor = TextSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = if (selectedDate == tomorrowStr) AmberGold else DarkSurfaceBorder,
+                                        enabled = true,
+                                        selected = selectedDate == tomorrowStr
+                                    )
+                                )
+
+                                FilterChip(
+                                    selected = selectedDate != null && selectedDate != todayStr && selectedDate != tomorrowStr,
+                                    onClick = { showDatePickerDialog = true },
+                                    label = {
+                                        Text(
+                                            text = if (selectedDate != null && selectedDate != todayStr && selectedDate != tomorrowStr) {
+                                                selectedDate!!
+                                            } else {
+                                                "Pick Date 🗓️"
+                                            },
+                                            fontSize = 11.sp
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AmberBgTint,
+                                        selectedLabelColor = AmberGold,
+                                        containerColor = DarkCardBg,
+                                        labelColor = TextSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = if (selectedDate != null && selectedDate != todayStr && selectedDate != tomorrowStr) AmberGold else DarkSurfaceBorder,
+                                        enabled = true,
+                                        selected = selectedDate != null && selectedDate != todayStr && selectedDate != tomorrowStr
+                                    )
+                                )
+                            }
+
+                            Text(
+                                text = "Islamic Hijri Date: ${PrayerTimeCalculator.getHijriDate(Date())}",
+                                fontSize = 10.5.sp,
+                                color = TextMuted
                             )
                         }
 
@@ -568,6 +932,13 @@ private fun AlarmEditDialog(
                                             labelText = urdu
                                             if (isNew) {
                                                 timeString = defTime
+                                                val pParts = defTime.split(":")
+                                                val pH = pParts.getOrNull(0)?.toIntOrNull() ?: 5
+                                                val pM = pParts.getOrNull(1)?.toIntOrNull() ?: 0
+                                                isAm = pH < 12
+                                                val hDisplay = if (is24Hour) pH else (if (pH % 12 == 0) 12 else pH % 12)
+                                                hourInput = "%02d".format(hDisplay)
+                                                minuteInput = "%02d".format(pM)
                                             }
                                         },
                                         label = { Text(name, fontSize = 12.sp) },
@@ -853,11 +1224,26 @@ private fun AlarmEditDialog(
 
                         Button(
                             onClick = {
+                                val rawH = hourInput.toIntOrNull() ?: initialHour
+                                val rawM = (minuteInput.toIntOrNull() ?: initialMinute).coerceIn(0, 59)
+                                val validH24 = if (is24Hour) {
+                                    rawH.coerceIn(0, 23)
+                                } else {
+                                    val clamped12 = if (rawH in 1..12) rawH else (if (initialHour % 12 == 0) 12 else initialHour % 12)
+                                    if (isAm) {
+                                        if (clamped12 == 12) 0 else clamped12
+                                    } else {
+                                        if (clamped12 == 12) 12 else clamped12 + 12
+                                    }
+                                }
+                                val finalTimeString = "%02d:%02d".format(validH24, rawM)
+
                                 val updated = alarm.copy(
-                                    time = timeString,
+                                    time = finalTimeString,
                                     prayerName = prayerName,
                                     label = labelText.ifBlank { "Namaz Reminder" },
-                                    days = selectedDays,
+                                    days = if (selectedDate != null) emptyList() else selectedDays,
+                                    date = selectedDate,
                                     soundType = soundType,
                                     customSoundUri = customUri,
                                     isMuted = isMuted,
@@ -877,6 +1263,60 @@ private fun AlarmEditDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (showDatePickerDialog) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePickerDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis != null) {
+                            val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = selectedMillis
+                            }
+                            selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+                        }
+                        showDatePickerDialog = false
+                    }
+                ) {
+                    Text("OK", color = AmberGold, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePickerDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = DarkSurface
+            )
+        ) {
+            DatePicker(
+                state = datePickerState,
+                colors = DatePickerDefaults.colors(
+                    containerColor = DarkSurface,
+                    titleContentColor = Color.White,
+                    headlineContentColor = AmberGold,
+                    weekdayContentColor = TextSecondary,
+                    subheadContentColor = TextSecondary,
+                    yearContentColor = Color.White,
+                    currentYearContentColor = AmberGold,
+                    selectedYearContentColor = Color.Black,
+                    selectedYearContainerColor = AmberGold,
+                    dayContentColor = Color.White,
+                    disabledDayContentColor = TextMuted,
+                    selectedDayContentColor = Color.Black,
+                    selectedDayContainerColor = AmberGold,
+                    todayContentColor = AmberGold,
+                    todayDateBorderColor = AmberGold
+                )
+            )
         }
     }
 }

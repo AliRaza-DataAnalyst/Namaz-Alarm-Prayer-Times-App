@@ -90,7 +90,8 @@ class NamazRepository(private val context: Context) {
                             isMuted = obj.optBoolean("isMuted", false),
                             days = daysList,
                             soundType = obj.optString("soundType", "alarm_tone_1"),
-                            customSoundUri = obj.optString("customSoundUri").takeIf { it.isNotEmpty() }
+                            customSoundUri = obj.optString("customSoundUri").takeIf { it.isNotEmpty() },
+                            date = obj.optString("date").takeIf { it.isNotEmpty() }
                         )
                     )
                 }
@@ -208,6 +209,7 @@ class NamazRepository(private val context: Context) {
             obj.put("days", daysArr)
             obj.put("soundType", item.soundType)
             obj.put("customSoundUri", item.customSoundUri ?: "")
+            obj.put("date", item.date ?: "")
             arr.put(obj)
         }
         prefs.edit().putString("alarms_json", arr.toString()).apply()
