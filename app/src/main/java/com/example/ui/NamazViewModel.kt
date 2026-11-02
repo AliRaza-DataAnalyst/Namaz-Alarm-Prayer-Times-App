@@ -458,17 +458,29 @@ class NamazViewModel(application: Application) : AndroidViewModel(application), 
 
     fun dismissAlarm() {
         synthesizer.stopAlarm()
-        AlarmSoundService.dismissRinging()
+        AlarmSoundService.stopService(getApplication())
     }
 
     fun snoozeAlarm(minutes: Int = 5) {
+        val currentInfo = ringingAlarm.value
+        val label = currentInfo?.label ?: "Snoozed Namaz Alarm"
+        val time = currentInfo?.time ?: PrayerTimeCalculator.formatTime24(System.currentTimeMillis())
+        val prayer = currentInfo?.prayerName
+        val sound = currentInfo?.soundType ?: settings.value.soundType
+        val customUri = currentInfo?.customUri ?: settings.value.customSoundUri
+        val isMuted = currentInfo?.isMuted ?: false
+
         dismissAlarm()
         AlarmScheduler.scheduleSnooze(
             getApplication(),
-            "Snoozed Namaz Alarm",
-            PrayerTimeCalculator.formatTime24(System.currentTimeMillis()),
-            null,
-            minutes
+            label,
+            time,
+            prayer,
+            minutes,
+            sound,
+            customUri,
+            isMuted,
+            settings.value.volume
         )
         viewModelScope.launch {
             _toastEvent.emit("Alarm snoozed for $minutes minutes.")

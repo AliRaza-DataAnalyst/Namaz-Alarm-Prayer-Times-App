@@ -46,6 +46,16 @@ class AlarmSoundService : Service() {
         fun dismissRinging() {
             _currentRingingAlarm.value = null
         }
+
+        fun stopService(context: Context) {
+            _currentRingingAlarm.value = null
+            try {
+                val stopIntent = Intent(context, AlarmSoundService::class.java).apply {
+                    action = ACTION_STOP
+                }
+                context.startService(stopIntent)
+            } catch (_: Exception) {}
+        }
     }
 
     private var synthesizer: SoundSynthesizer? = null
@@ -107,7 +117,7 @@ class AlarmSoundService : Service() {
         val text = "$label $time — Tap to open Namaz Alarm"
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             this, 0, openAppIntent,

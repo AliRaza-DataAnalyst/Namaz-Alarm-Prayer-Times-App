@@ -107,7 +107,17 @@ object AlarmScheduler {
         }
     }
 
-    fun scheduleSnooze(context: Context, label: String, time: String, prayer: String?, minutes: Int = 5) {
+    fun scheduleSnooze(
+        context: Context,
+        label: String,
+        time: String,
+        prayer: String?,
+        minutes: Int = 5,
+        sound: String = "alarm_tone_1",
+        customUri: String? = null,
+        isMuted: Boolean = false,
+        volume: Float = 0.8f
+    ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val triggerAtMillis = System.currentTimeMillis() + (minutes * 60 * 1000L)
 
@@ -115,6 +125,10 @@ object AlarmScheduler {
             putExtra(AlarmSoundService.EXTRA_LABEL, "$label (Snoozed)")
             putExtra(AlarmSoundService.EXTRA_TIME, time)
             putExtra(AlarmSoundService.EXTRA_PRAYER, prayer)
+            putExtra(AlarmSoundService.EXTRA_SOUND, sound)
+            putExtra(AlarmSoundService.EXTRA_CUSTOM_URI, customUri)
+            putExtra(AlarmSoundService.EXTRA_MUTED, isMuted)
+            putExtra(AlarmSoundService.EXTRA_VOLUME, volume)
         }
 
         val pi = PendingIntent.getBroadcast(
