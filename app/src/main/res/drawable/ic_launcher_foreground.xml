@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/namaz_alarm_icon_1793553928925"
+        android:drawable="@drawable/play_store_icon_1793970133293"
         android:gravity="center" />
 </layer-list>
