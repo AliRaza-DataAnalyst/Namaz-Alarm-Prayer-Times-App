@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.namazalarm.qxkt"
+    applicationId = "com.armdevelopers.namazalarm786"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -45,6 +45,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      ndk {
+        debugSymbolLevel = "SYMBOL_TABLE"
+      }
       // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
       // AI Studio.
       signingConfig = signingConfigs.getByName("release")
